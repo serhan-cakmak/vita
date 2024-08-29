@@ -54,34 +54,49 @@ class CausalGrapher:
 
         if params["normalize"]:
             self.normalize_df()
-        if params["pca"]:
-            self.apply_pca()
+        if "pca_ncomponents" in params:
+            self.apply_pca(params["pca_ncomponents"])
 
         self.method = params["method"]
         self.params = params[self.method]
 
-    def apply_pca(self):
-        reward = self.df["rewards"]
-        matrix = self.df.drop(columns=["rewards"])
+    def apply_pca(self, n_components=0.85):
 
-        scaler = StandardScaler()
-        scaled_data = scaler.fit_transform(matrix)
+        # The code below applies pca to each group of features. In a paper they tested this and worked well.
+        # Cannot be said the same for our case.
 
-        pca = PCA(n_components=0.85)
-        # pca = PCA(n_components=matrix.columns.__len__()-3)
-        tmp = pd.DataFrame(pca.fit_transform(scaled_data))
-        loadings = pca.components_
+        # info = [["rewards"], [" AU07_r", " AU10_r", " AU14_r", " AU06_r", " AU12_r", " AU15_r"],
+        #         ["speech_duration", "silence_duration"],
+        #         ["alphaRatio_sma3", "Loudness_sma3", "spectralFlux_sma3", "hammarbergIndex_sma3"]]
 
-        threshold = 0.45
-        loadings = pd.DataFrame(loadings.T, columns=tmp.columns,
-                                index=matrix.columns)  # loadings is new_cols x old_cols
-        loadings.columns = ["+".join(loadings.index[loadings[i].abs() > threshold]) for i in range(loadings.shape[1])]
+        info = [["rewards"], self.df.columns.drop("rewards")]
+        dfs = pd.DataFrame()
+        for group in info:
+            matrix = self.df[group]
+            scaler = StandardScaler()
+            scaled_data = scaler.fit_transform(matrix)
+            pca = PCA(n_components= n_components)
+            tmp = pd.DataFrame(pca.fit_transform(scaled_data))
 
-        loadings.columns = [loadings.columns[i] if loadings.columns[i] != "" else loadings.iloc[:, i].abs().idxmax() + "*" for i in range(loadings.columns.__len__())]
-        print(loadings.to_string())
+            loadings = pca.components_
 
-        tmp.columns = loadings.columns
-        self.df = pd.concat([tmp, self.df], axis=1)
+            threshold = 0.45
+            loadings = pd.DataFrame(loadings.T, columns=tmp.columns,
+                                    index=matrix.columns)
+            loadings.columns = ["+".join(loadings.index[loadings[i].abs() > threshold]) for i in
+                                range(loadings.shape[1])]
+            loadings.columns = [
+                loadings.columns[i] if loadings.columns[i] != "" else loadings.iloc[:, i].abs().idxmax() + "*" for i in
+                range(loadings.columns.__len__())]
+
+            print(loadings.to_string())
+            tmp.columns = loadings.columns
+            dfs = pd.concat([dfs, tmp], axis=1)
+
+        dfs = pd.concat([dfs, self.df.drop(columns=["rewards"])], axis=1)
+        self.df = dfs
+
+
 
     def get_background_knowledge_object(self, prior_knowledge):
         features = {self.df.columns[i]: i + 1 for i in range(len(self.df.columns))}
@@ -230,6 +245,7 @@ class CausalGrapher:
             return
 
         pyd = None
+        print(cg)
 
         if self.method == "gin":
             pyd = GraphUtils.to_pydot(cg)
@@ -285,8 +301,6 @@ class CausalGrapher:
 
         row1 = self.df[x].values.reshape(-1, 1)
         row2 = self.df[y].values.reshape(-1, 1)
-        print(row1.shape)
-        print(row2.shape)
 
         p_forward, p_backward = model.cause_or_effect(row1, row2)
         print(f"{x} -> {y}: {p_forward}")
@@ -319,3 +333,44 @@ def average_graphs(graphs):
     graphs[0].graph = avg_matrix
 
     return graphs[0]
+
+
+
+def ensemble(graphs):
+    n = graphs[0].graph.shape[0]
+    threshold = 0.5 * len(graphs)
+
+    majority = np.zeros((n, n))
+
+
+    for i in range(n):
+        for j in range(n):
+            directed = 0
+            undirected = 0
+            confounder = 0
+            notancestor = 0
+            for graph in graphs:
+                if graph.graph[i][j] == -1 and graph.graph[j][i] == 1:
+                    directed += 1
+                elif graph.graph[i][j] == 2 and graph.graph[j][i] == 1:
+                    notancestor += 1
+                elif graph.graph[i][j] == 1 and graph.graph[j][i] == 1:
+                    confounder += 1
+                elif graph.graph[i][j] == 2 and graph.graph[j][i] == 2:
+                    undirected += 1
+            print(f"{i} -> {j}: {directed}, {undirected}, {confounder}, {notancestor}")
+            if directed > threshold:
+                majority[i][j] = -1
+            elif undirected > threshold:
+                majority[i][j] = 2
+            elif confounder > threshold:
+                majority[i][j] = 1
+            elif notancestor > threshold:
+                majority[i][j] = 0
+
+    print(majority)
+
+    graphs[0].dpath = majority
+
+    return graphs[0]
+
