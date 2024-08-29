@@ -338,7 +338,7 @@ def average_graphs(graphs):
 
 def ensemble(graphs):
     n = graphs[0].graph.shape[0]
-    threshold = 0.5 * len(graphs)
+    threshold = 0.6 * len(graphs)
 
     majority = np.zeros((n, n))
 
@@ -361,16 +361,24 @@ def ensemble(graphs):
             print(f"{i} -> {j}: {directed}, {undirected}, {confounder}, {notancestor}")
             if directed > threshold:
                 majority[i][j] = -1
+                majority[j][i] = 1
             elif undirected > threshold:
                 majority[i][j] = 2
+                majority[j][i] = 2
             elif confounder > threshold:
                 majority[i][j] = 1
+                majority[j][i] = 1
             elif notancestor > threshold:
+                majority[i][j] = 2
+                majority[j][i] = 1
+            else:
                 majority[i][j] = 0
+                majority[j][i] = 0
 
     print(majority)
 
     graphs[0].dpath = majority
+    print(graphs[0])
 
     return graphs[0]
 
