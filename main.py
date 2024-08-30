@@ -1,7 +1,9 @@
+import numpy as np
+
 from causal_grapher import *
 
 params = {
-    "method": "pc",
+    "method": "fci",
 
     "modify_actions": False,
     "normalize": False,  # has no effect on the performance
@@ -12,8 +14,7 @@ params = {
                          # "actions",
                          " AU01_r", " AU02_r", " AU04_r", " AU05_r", " AU09_r", " AU17_r", " AU20_r", " AU23_r",
                          " AU25_r", " AU26_r", " AU45_r",  # openface features that deducts the models performance
-                         # " AU15_r",
-                         # " AU14_r",
+                         " AU15_r",
                          # " AU07_r", " AU10_r", " AU14_r", " AU06_r", " AU12_r",  # the actual features that are used for openface
                          "alphaRatio_sma3", "Loudness_sma3", "spectralFlux_sma3", "hammarbergIndex_sma3",
                          # opensmile features
@@ -21,7 +22,7 @@ params = {
                          #  "speech_duration", "silence_duration"
                          ],
 
-    # "prior_knowledge": [("speech_duration", "rewards"), (" AU12_r", "rewards")],
+    "prior_knowledge": [("speech_duration", "rewards")],
     "pc": {
         "alpha": 0.01,
         "indep_test": "kci",  # ["fisherz", "chisq", "gsq", "kci"]
@@ -30,7 +31,7 @@ params = {
     "fci": {
         "alpha": 0.01,
         "independence_test_method": "kci",
-        "uc_rule": 0,  # 0(default), 1, 2. But 2 performs the worst
+        "uc_rule": 1,  # 0(default), 1, 2. But 2 performs the worst
 
     },
     "ges": {
@@ -76,18 +77,23 @@ print(cg.df.columns)
 # cg.get_scatter_plot(best_line=False, degree=1)
 
 graphs = []
-num_ensemble = 10 #or none
+apply_ensemble = True
+num_ensemble = 10
 
 for _ in range(num_ensemble):
-    if num_ensemble:
-        cg.sample_df(1, replace=True)
     G = cg.get_causal_graph()
     graphs.append(G)
-    # if G is not None:
-    #     cg.visualize_graph(G)
+    if apply_ensemble:
+        cg.df = base_df.sample(frac=0.8, replace=False).reset_index(drop=True)
+        # cg.sample_df(1, replace=True) # because the data is too small and noicy maybe not the best idea
+
+    else:
+        cg.visualize_graph(G)
+
     # cg.shuffle_df()
 
-if num_ensemble:
+
+if apply_ensemble:
     majored_g = ensemble(graphs, cg.method)
     cg.visualize_graph(majored_g)
 

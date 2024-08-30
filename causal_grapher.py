@@ -338,32 +338,37 @@ def average_graphs(graphs):
     return graphs[0]
 
 
-def ensemble(graphs, method="pc"):
+def ensemble(graphs, method):
     n = graphs[0].graph.shape[0]
-    threshold = 0.4 * len(graphs)
-
+    threshold = 0.3 * len(graphs)
     majority = np.zeros((n, n))
 
     for i in range(n):
-        for j in range(n):
-            directed, undirected, confounder, notancestor = get_types_edges(graphs, i, j, method)
-            print(f"{i} -> {j}: {directed}, {undirected}, {confounder}, {notancestor}")
-            majority = modify_majority_matrix(majority, i, j, threshold, directed, undirected, confounder, notancestor)
+        for j in range(i, n):
+            edge_type = get_types_edges(graphs, i, j, method, threshold)
+            print(f"{i} -> {j}: {edge_type}")
+            redge_type = get_types_edges(graphs, j, i, method, threshold)
+            print(f"{j} -> {i}: {redge_type}")
+            if redge_type == "directed":
+                majority = modify_majority_matrix(majority, j, i, redge_type, method)
+            else:
+                majority = modify_majority_matrix(majority, i, j, edge_type, method)
 
+            print(f"Majority: {int(majority[i][j])}, {int(majority[j][i])}")
 
     print(majority)
 
-    graphs[0].dpath = majority
-    print(graphs[0])
+    graphs[0].graph = majority
 
     return graphs[0]
 
 
-def get_types_edges(graphs, i, j, type):
+def get_types_edges(graphs, i, j, type, threshold):
     directed = 0
     undirected = 0
     confounder = 0
     notancestor = 0
+
     if type == "fci":
         for graph in graphs:
             if graph.graph[i][j] == -1 and graph.graph[j][i] == 1:
@@ -374,43 +379,42 @@ def get_types_edges(graphs, i, j, type):
                 confounder += 1
             elif graph.graph[i][j] == 2 and graph.graph[j][i] == 2:
                 undirected += 1
-        return directed, undirected, confounder, notancestor
-
     if type == "pc":
         for graph in graphs:
             if graph.graph[i][j] == -1 and graph.graph[j][i] == 1:
                 directed += 1
             elif graph.graph[i][j] == -1 and graph.graph[j][i] == -1:
                 undirected += 1
-        return directed, undirected, None, None
+
+    max_val = max(directed, undirected, confounder, notancestor)
+    dicti = {"directed": directed, "undirected": undirected, "confounder": confounder, "notancestor": notancestor}
+    if max_val < threshold:
+        print(dicti)
+        return "Independent"
+    print(dicti)
+    return max(dicti, key=dicti.get)
 
 
-def modify_majority_matrix(majority, i, j, threshold, directed, undirected, confounder, notancestor,):
-    if confounder and notancestor:
-        if directed >= threshold:
+def modify_majority_matrix(majority, i, j, edge_type, method):
+    if method == "fci":
+        if edge_type== "directed":
             majority[i][j] = -1
             majority[j][i] = 1
-        elif undirected >= threshold:
+        elif edge_type == "undirected":
             majority[i][j] = 2
             majority[j][i] = 2
-        elif confounder > threshold:
+        elif edge_type == "confounder":
             majority[i][j] = 1
             majority[j][i] = 1
-        elif notancestor >= threshold:
+        elif edge_type == "notancestor":
             majority[i][j] = 2
             majority[j][i] = 1
-        else:
-            majority[i][j] = 0
-            majority[j][i] = 0
     else:
-        if directed >= threshold:
+        if edge_type== "directed":
             majority[i][j] = -1
             majority[j][i] = 1
-        elif undirected >= threshold:
+        elif edge_type == "undirected":
             majority[i][j] = -1
             majority[j][i] = -1
-        else:
-            majority[i][j] = 0
-            majority[j][i] = 0
 
     return majority
