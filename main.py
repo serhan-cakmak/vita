@@ -1,22 +1,24 @@
 from causal_grapher import *
 
 params = {
-    "method": "fci",
+    "method": "pc",
 
     "modify_actions": False,
     "normalize": False,  # has no effect on the performance
     "shuffle_df": False,
     # "pca_ncomponents": 0.85,        # gives some abstraction to the features
 
-    "features_to_drop": ["interrupt", "actions","action1", "action2", "action3", "action4", "ex1", "ex2", "ex3", "ex4",
+    "features_to_drop": ["interrupt", "actions", "action1", "action2", "action3", "action4", "ex1", "ex2", "ex3", "ex4",
                          # "actions",
-                        " AU01_r", " AU02_r", " AU04_r", " AU05_r", " AU09_r"," AU17_r", " AU20_r", " AU23_r", " AU25_r", " AU26_r", " AU45_r", # openface features that deducts the models performance
-                        # " AU15_r",
+                         " AU01_r", " AU02_r", " AU04_r", " AU05_r", " AU09_r", " AU17_r", " AU20_r", " AU23_r",
+                         " AU25_r", " AU26_r", " AU45_r",  # openface features that deducts the models performance
+                         # " AU15_r",
                          # " AU14_r",
                          # " AU07_r", " AU10_r", " AU14_r", " AU06_r", " AU12_r",  # the actual features that are used for openface
-                        # "alphaRatio_sma3", "Loudness_sma3", "spectralFlux_sma3", "hammarbergIndex_sma3",   #opensmile features
-                        # "rewards",
-                        #  "speech_duration", "silence_duration"
+                         "alphaRatio_sma3", "Loudness_sma3", "spectralFlux_sma3", "hammarbergIndex_sma3",
+                         # opensmile features
+                         # "rewards",
+                         #  "speech_duration", "silence_duration"
                          ],
 
     # "prior_knowledge": [("speech_duration", "rewards"), (" AU12_r", "rewards")],
@@ -28,7 +30,7 @@ params = {
     "fci": {
         "alpha": 0.01,
         "independence_test_method": "kci",
-        "uc_rule": 1,  # 0(default), 1, 2. But 2 performs the worst
+        "uc_rule": 0,  # 0(default), 1, 2. But 2 performs the worst
 
     },
     "ges": {
@@ -70,20 +72,26 @@ params = {
 
 cg = CausalGrapher("data/results/extended_data.xlsx", params=params)
 base_df = cg.df.copy()
+print(cg.df.columns)
 # cg.get_scatter_plot(best_line=False, degree=1)
 
 graphs = []
-for _ in range(20):
-    cg.df = base_df.sample(frac=0.4).reset_index(drop=True)
+num_ensemble = 10 #or none
+
+for _ in range(num_ensemble):
+    if num_ensemble:
+        cg.sample_df(1, replace=True)
     G = cg.get_causal_graph()
     graphs.append(G)
     # if G is not None:
     #     cg.visualize_graph(G)
     # cg.shuffle_df()
 
+if num_ensemble:
+    majored_g = ensemble(graphs, cg.method)
+    cg.visualize_graph(majored_g)
 
-majored_g =  ensemble(graphs=graphs)
-cg.visualize_graph(majored_g)
+
 # cg.learn_direction("rewards", " AU07_r+ AU14_r", method= "anm") # "pnl", "anm
 
 #
@@ -91,5 +99,3 @@ cg.visualize_graph(majored_g)
 #     cg.check_independency("rewards", i)
 #     cg.learn_direction("rewards", i, method="anm")  # "pnl", "anm
 #     cg.learn_direction("rewards", i, method="pnl")  # "pnl", "anm
-
-

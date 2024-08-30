@@ -75,7 +75,7 @@ class CausalGrapher:
             matrix = self.df[group]
             scaler = StandardScaler()
             scaled_data = scaler.fit_transform(matrix)
-            pca = PCA(n_components= n_components)
+            pca = PCA(n_components=n_components)
             tmp = pd.DataFrame(pca.fit_transform(scaled_data))
 
             loadings = pca.components_
@@ -93,10 +93,8 @@ class CausalGrapher:
             tmp.columns = loadings.columns
             dfs = pd.concat([dfs, tmp], axis=1)
 
-        dfs = pd.concat([dfs, self.df.drop(columns=["rewards"])], axis=1)
+        # dfs = pd.concat([dfs, self.df.drop(columns=["rewards"])], axis=1)
         self.df = dfs
-
-
 
     def get_background_knowledge_object(self, prior_knowledge):
         features = {self.df.columns[i]: i + 1 for i in range(len(self.df.columns))}
@@ -315,6 +313,11 @@ class CausalGrapher:
             p_val = obj(dct[x], dct[y], )
             print("\t", i, p_val)
 
+    def sample_df(self, frac=1, replace=False):
+        if replace:
+            warnings.warn("Be careful about the frac value since it can converge to 0.")
+        self.df = self.df.sample(frac=frac, replace=replace).reset_index(drop=True)
+
 
 def average_graphs(graphs):
     # Initialize a zero matrix
@@ -335,45 +338,18 @@ def average_graphs(graphs):
     return graphs[0]
 
 
-
-def ensemble(graphs):
+def ensemble(graphs, method="pc"):
     n = graphs[0].graph.shape[0]
-    threshold = 0.6 * len(graphs)
+    threshold = 0.4 * len(graphs)
 
     majority = np.zeros((n, n))
 
-
     for i in range(n):
         for j in range(n):
-            directed = 0
-            undirected = 0
-            confounder = 0
-            notancestor = 0
-            for graph in graphs:
-                if graph.graph[i][j] == -1 and graph.graph[j][i] == 1:
-                    directed += 1
-                elif graph.graph[i][j] == 2 and graph.graph[j][i] == 1:
-                    notancestor += 1
-                elif graph.graph[i][j] == 1 and graph.graph[j][i] == 1:
-                    confounder += 1
-                elif graph.graph[i][j] == 2 and graph.graph[j][i] == 2:
-                    undirected += 1
+            directed, undirected, confounder, notancestor = get_types_edges(graphs, i, j, method)
             print(f"{i} -> {j}: {directed}, {undirected}, {confounder}, {notancestor}")
-            if directed > threshold:
-                majority[i][j] = -1
-                majority[j][i] = 1
-            elif undirected > threshold:
-                majority[i][j] = 2
-                majority[j][i] = 2
-            elif confounder > threshold:
-                majority[i][j] = 1
-                majority[j][i] = 1
-            elif notancestor > threshold:
-                majority[i][j] = 2
-                majority[j][i] = 1
-            else:
-                majority[i][j] = 0
-                majority[j][i] = 0
+            majority = modify_majority_matrix(majority, i, j, threshold, directed, undirected, confounder, notancestor)
+
 
     print(majority)
 
@@ -382,3 +358,59 @@ def ensemble(graphs):
 
     return graphs[0]
 
+
+def get_types_edges(graphs, i, j, type):
+    directed = 0
+    undirected = 0
+    confounder = 0
+    notancestor = 0
+    if type == "fci":
+        for graph in graphs:
+            if graph.graph[i][j] == -1 and graph.graph[j][i] == 1:
+                directed += 1
+            elif graph.graph[i][j] == 2 and graph.graph[j][i] == 1:
+                notancestor += 1
+            elif graph.graph[i][j] == 1 and graph.graph[j][i] == 1:
+                confounder += 1
+            elif graph.graph[i][j] == 2 and graph.graph[j][i] == 2:
+                undirected += 1
+        return directed, undirected, confounder, notancestor
+
+    if type == "pc":
+        for graph in graphs:
+            if graph.graph[i][j] == -1 and graph.graph[j][i] == 1:
+                directed += 1
+            elif graph.graph[i][j] == -1 and graph.graph[j][i] == -1:
+                undirected += 1
+        return directed, undirected, None, None
+
+
+def modify_majority_matrix(majority, i, j, threshold, directed, undirected, confounder, notancestor,):
+    if confounder and notancestor:
+        if directed >= threshold:
+            majority[i][j] = -1
+            majority[j][i] = 1
+        elif undirected >= threshold:
+            majority[i][j] = 2
+            majority[j][i] = 2
+        elif confounder > threshold:
+            majority[i][j] = 1
+            majority[j][i] = 1
+        elif notancestor >= threshold:
+            majority[i][j] = 2
+            majority[j][i] = 1
+        else:
+            majority[i][j] = 0
+            majority[j][i] = 0
+    else:
+        if directed >= threshold:
+            majority[i][j] = -1
+            majority[j][i] = 1
+        elif undirected >= threshold:
+            majority[i][j] = -1
+            majority[j][i] = -1
+        else:
+            majority[i][j] = 0
+            majority[j][i] = 0
+
+    return majority
