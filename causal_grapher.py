@@ -340,16 +340,16 @@ def average_graphs(graphs):
 
 def ensemble(graphs, method):
     n = graphs[0].graph.shape[0]
-    threshold = 0.3 * len(graphs)
+    num = len(graphs)
     majority = np.zeros((n, n))
 
     for i in range(n):
         for j in range(i, n):
-            edge_type = get_types_edges(graphs, i, j, method, threshold)
+            edge_type = get_types_edges(graphs, i, j, method, num)
             print(f"{i} -> {j}: {edge_type}")
-            redge_type = get_types_edges(graphs, j, i, method, threshold)
+            redge_type = get_types_edges(graphs, j, i, method, num)
             print(f"{j} -> {i}: {redge_type}")
-            if redge_type == "directed":
+            if redge_type == "directed" or redge_type == "notancestor":
                 majority = modify_majority_matrix(majority, j, i, redge_type, method)
             else:
                 majority = modify_majority_matrix(majority, i, j, edge_type, method)
@@ -363,7 +363,7 @@ def ensemble(graphs, method):
     return graphs[0]
 
 
-def get_types_edges(graphs, i, j, type, threshold):
+def get_types_edges(graphs, i, j, type, n):
     directed = 0
     undirected = 0
     confounder = 0
@@ -386,18 +386,20 @@ def get_types_edges(graphs, i, j, type, threshold):
             elif graph.graph[i][j] == -1 and graph.graph[j][i] == -1:
                 undirected += 1
 
-    max_val = max(directed, undirected, confounder, notancestor)
-    dicti = {"directed": directed, "undirected": undirected, "confounder": confounder, "notancestor": notancestor}
-    if max_val < threshold:
-        print(dicti)
-        return "Independent"
+    dicti = {"directed": directed, "undirected": undirected, "confounder": confounder, "notancestor": notancestor,
+             "independent": n - directed - undirected - confounder - notancestor}
     print(dicti)
-    return max(dicti, key=dicti.get)
+
+    if dicti["independent"] < 5:
+        dicti.pop("independent")
+
+    key_order = ["directed", "notancestor", "confounder", "undirected", "independent"]
+    return max(dicti.items(), key=lambda x: (x[1], key_order.index(x[0])))[0]
 
 
 def modify_majority_matrix(majority, i, j, edge_type, method):
     if method == "fci":
-        if edge_type== "directed":
+        if edge_type == "directed":
             majority[i][j] = -1
             majority[j][i] = 1
         elif edge_type == "undirected":
@@ -410,7 +412,7 @@ def modify_majority_matrix(majority, i, j, edge_type, method):
             majority[i][j] = 2
             majority[j][i] = 1
     else:
-        if edge_type== "directed":
+        if edge_type == "directed":
             majority[i][j] = -1
             majority[j][i] = 1
         elif edge_type == "undirected":
