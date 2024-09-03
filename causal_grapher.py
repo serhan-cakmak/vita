@@ -390,7 +390,7 @@ def get_types_edges(graphs, i, j, type, n):
              "independent": n - directed - undirected - confounder - notancestor}
     print(dicti)
 
-    if dicti["independent"] < 5:
+    if dicti["independent"] < n/2:
         dicti.pop("independent")
 
     key_order = ["directed", "notancestor", "confounder", "undirected", "independent"]
