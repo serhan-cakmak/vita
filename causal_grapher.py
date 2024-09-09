@@ -338,23 +338,25 @@ def average_graphs(graphs):
     return graphs[0]
 
 
-def ensemble(graphs, method):
+def ensemble(graphs, method, col_list):
     n = graphs[0].graph.shape[0]
     num = len(graphs)
     majority = np.zeros((n, n))
 
     for i in range(n):
+        print(col_list[i])
         for j in range(i, n):
+            if i == j:
+                continue
+            print("\t", "-" * 15)
             edge_type = get_types_edges(graphs, i, j, method, num)
-            print(f"{i} -> {j}: {edge_type}")
+            print(f"\t{col_list[i]} -> {col_list[j]}: {edge_type}")
             redge_type = get_types_edges(graphs, j, i, method, num)
-            print(f"{j} -> {i}: {redge_type}")
-            if redge_type == "directed" or redge_type == "notancestor":
+            print(f"\t---{redge_type}")
+            if redge_type == "directed" or redge_type == "notancestor" or edge_type== "independent":
                 majority = modify_majority_matrix(majority, j, i, redge_type, method)
             else:
                 majority = modify_majority_matrix(majority, i, j, edge_type, method)
-
-            print(f"Majority: {int(majority[i][j])}, {int(majority[j][i])}")
 
     print(majority)
 
@@ -379,7 +381,7 @@ def get_types_edges(graphs, i, j, type, n):
                 confounder += 1
             elif graph.graph[i][j] == 2 and graph.graph[j][i] == 2:
                 undirected += 1
-    if type == "pc":
+    else:
         for graph in graphs:
             if graph.graph[i][j] == -1 and graph.graph[j][i] == 1:
                 directed += 1
@@ -388,9 +390,9 @@ def get_types_edges(graphs, i, j, type, n):
 
     dicti = {"directed": directed, "undirected": undirected, "confounder": confounder, "notancestor": notancestor,
              "independent": n - directed - undirected - confounder - notancestor}
-    print(dicti)
+    print("\t\t\t", dicti)
 
-    if dicti["independent"] < n/2:
+    if dicti["independent"] <= n / 2:
         dicti.pop("independent")
 
     key_order = ["directed", "notancestor", "confounder", "undirected", "independent"]
