@@ -22,6 +22,7 @@ from causallearn.graph.GraphNode import GraphNode
 from causallearn.search.ScoreBased.ExactSearch import bic_exact_search
 from causallearn.utils.cit import *
 
+
 import pandas as pd
 from matplotlib import pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
@@ -37,7 +38,7 @@ from pathlib import Path
 
 class CausalGrapher:
     def __init__(self, data_file, params):
-        self.df = self.read_excel(data_file, params["features_to_drop"])
+        self.df = self.read_excel(data_file, params[params["features"]])
         if params["shuffle_df"]:
             self.shuffle_df()
         if params["modify_actions"]:
@@ -59,6 +60,7 @@ class CausalGrapher:
 
         self.method = params["method"]
         self.params = params[self.method]
+        self.feats = params["features"]
 
     def apply_pca(self, n_components=0.85):
 
@@ -185,11 +187,10 @@ class CausalGrapher:
         self.params = {"name": self.params["name"]}
         return model.adjacency_matrix_
 
-    def read_excel(self, file_name, features_to_drop=[]):
+    def read_excel(self, file_name, features_to_keep=[]):
         df = pd.read_excel(file_name)
         try:
-            df = df.drop(
-                columns=features_to_drop)
+            df = df[features_to_keep]
         except:
             warnings.warn(
                 "If you do not test with rosas/reward file, there is a problem with the columns while dropping.")
@@ -224,13 +225,13 @@ class CausalGrapher:
 
     def get_target(self):
 
-        folder_name = "images1/" + self.method + "/"
+        folder_name = "images1/" + self.method + "/" + self.feats + "/"
         self.create_folder(folder_name)
 
         num = os.listdir(folder_name).__len__().__str__()
         params_str = ""
         if isinstance(self.params, dict):
-            params_str = "_".join(f"{key}={urllib.parse.quote(str(value))}" for key, value in self.params.items())
+            params_str = "_".join(f"{key}={urllib.parse.quote(str(value))}" for key, value in self.params.items() if key != "cache_path")
         file_name = params_str + "-" + num
         return folder_name, file_name
 
