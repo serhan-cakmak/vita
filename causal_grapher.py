@@ -22,7 +22,7 @@ from causallearn.graph.GraphNode import GraphNode
 from causallearn.search.ScoreBased.ExactSearch import bic_exact_search
 from causallearn.utils.cit import *
 
-
+import itertools
 import pandas as pd
 from matplotlib import pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
@@ -38,7 +38,7 @@ from pathlib import Path
 
 class CausalGrapher:
     def __init__(self, data_file, params):
-        self.df = self.read_excel(data_file, params[params["features"]])
+        self.df = self.read_file(data_file, params[params["features"]])
         if params["shuffle_df"]:
             self.shuffle_df()
         if params["modify_actions"]:
@@ -187,13 +187,19 @@ class CausalGrapher:
         self.params = {"name": self.params["name"]}
         return model.adjacency_matrix_
 
-    def read_excel(self, file_name, features_to_keep=[]):
-        df = pd.read_excel(file_name)
+    def read_file(self, file_name, features_to_keep=[]):
+        if file_name.endswith(".csv"):
+            df = pd.read_csv(file_name)
+        elif file_name.endswith(".xlsx"):
+            df = pd.read_excel(file_name)
+        else:
+            warnings.warn("The file type is not supported.")
+            return None
         try:
             df = df[features_to_keep]
         except:
             warnings.warn(
-                "If you do not test with rosas/reward file, there is a problem with the columns while dropping.")
+                "The features provided in the config file are not in the data. All features will be used instead.")
         # columns=["interrupt", "action1", "action2", "action3", "action4"])
         return df
 
@@ -231,11 +237,21 @@ class CausalGrapher:
         num = os.listdir(folder_name).__len__().__str__()
         params_str = ""
         if isinstance(self.params, dict):
-            params_str = "_".join(f"{key}={urllib.parse.quote(str(value))}" for key, value in self.params.items() if key != "cache_path")
+            params_str = "_".join(
+                f"{key}={urllib.parse.quote(str(value))}" for key, value in self.params.items() if key != "cache_path")
         file_name = params_str + "-" + num
         return folder_name, file_name
 
+    def rename_columns(self):
+        self.df.rename(
+            columns={"rewards": "Reward", "speech_duration": "Speech Duration", "silence_duration": "Silence Duration"},
+            inplace=True)
+        self.df.rename(columns={i: i.strip().split("_")[0] for i in self.df.columns if "_" in i}, inplace=True)
+        self.df.rename(columns={"alphaRatio": "Alpha Ratio", "Loudness": "Loudness", "spectralFlux": "Spectral Flux",
+                                "hammarbergIndex": "Hammarberg Index"}, inplace=True)
+
     def visualize_graph(self, cg):
+        self.rename_columns()
         folder_name, file_name = self.get_target()
 
         if self.method == "lingam" or self.method == "exact":
@@ -251,10 +267,11 @@ class CausalGrapher:
         else:
             pyd = GraphUtils.to_pydot(cg, labels=self.df.columns)
 
-        pyd.write_png(folder_name + "/" + file_name + ".png")
+        name = folder_name + "/" + file_name + ".png"
+        pyd.write_png(name)
 
-        # img = Image.open(name)
-        # img.show()
+        img = Image.open(name)
+        img.show()
 
     def create_folder(self, name):
         Path(name).mkdir(parents=True, exist_ok=True)
@@ -305,13 +322,26 @@ class CausalGrapher:
         print(f"{x} -> {y}: {p_forward}")
         print(f"{y} -> {x}: {p_backward}")
 
+    def check_all_independencies(self):
+        feats = self.df.columns
+        dct = {feats[i]: i for i in range(len(feats))}
+        num = len(feats)
+        ind_reward = dct["rewards"]
+        combinations = get_combinations(list(range(num)), [ind_reward])
+        for i in range(len(feats)):
+            if i == ind_reward:
+                continue
+            for depth in combinations:
+                for j in depth:
+                    if i in j:
+                        continue
+                    print(feats[i], [feats[t] for t in j])
+                    self.check_independency(ind_reward, i, j)
+
     def check_independency(self, x, y, conditional_set=None):
-        dct = {self.df.columns[i]: i for i in range(len(self.df.columns))}
-        conditional_set = [dct[i] for i in conditional_set] if conditional_set is not None else None
-        print(x, "-", y)
-        for i in [fisherz, chisq, gsq, kci]:
+        for i in [kci]:
             obj = CIT(self.df.values, i)
-            p_val = obj(dct[x], dct[y], )
+            p_val = obj(x, y, conditional_set)
             print("\t", i, p_val)
 
     def sample_df(self, frac=1, replace=False):
@@ -354,7 +384,7 @@ def ensemble(graphs, method, col_list):
             print(f"\t{col_list[i]} -> {col_list[j]}: {edge_type}")
             redge_type = get_types_edges(graphs, j, i, method, num)
             print(f"\t---{redge_type}")
-            if redge_type == "directed" or redge_type == "notancestor" or edge_type== "independent":
+            if redge_type == "directed" or redge_type == "notancestor" or edge_type == "independent":
                 majority = modify_majority_matrix(majority, j, i, redge_type, method)
             else:
                 majority = modify_majority_matrix(majority, i, j, edge_type, method)
@@ -423,3 +453,13 @@ def modify_majority_matrix(majority, i, j, edge_type, method):
             majority[j][i] = -1
 
     return majority
+
+
+def get_combinations(feats, drop):
+    tmp = feats.copy()
+    [tmp.remove(i) for i in drop if i in tmp]
+    res = []
+    for i in range(len(tmp) + 1):
+        res.append(list(itertools.combinations(tmp, i)))
+    print(res)
+    return res

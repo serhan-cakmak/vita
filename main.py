@@ -4,26 +4,48 @@ import pandas as pd
 from causal_grapher import *
 
 
+def display_sepset(G):
+    feats = cg.df.columns
+    num = len(G.graph)
+    for i in range(num):
+        for j in range(num):
+            if i != j and G.graph[i][j] == 0 and G.graph[j][i] == 0:
+                sepset = [feats[int(node.get_name()[1:]) - 1] for node in G.get_sepset(G.nodes[i], G.nodes[j])]
+                if len(sepset) > 0:
+                    print(feats[i], feats[j], sepset)
+
+
 apply_ensemble = False
 show_sepset = True
+num_ensemble = 30
 
 params = {
-    "method": "pc",
-    "features": "difsa",  # "all", "difsa, test
+    "method": "fci",
+    "features": "test",  # all, "difsa, test, dbn, thresh
 
     "modify_actions": False,
     "normalize": False,  # has no effect on the performance
     "shuffle_df": False,
     # "pca_ncomponents": 0.85,        # gives some abstraction to the features
 
-
-    "all": [" AU01_r", " AU02_r", " AU04_r", " AU05_r", " AU06_r", " AU07_r", " AU09_r", " AU10_r", " AU12_r", " AU14_r", " AU15_r", " AU17_r", " AU20_r", " AU23_r", " AU25_r", " AU26_r", " AU45_r", "alphaRatio_sma3", "Loudness_sma3", "spectralFlux_sma3", "hammarbergIndex_sma3", "rewards", "speech_duration", "silence_duration"],
-    "difsa": [" AU01_r", " AU02_r", " AU04_r", " AU05_r", " AU06_r", " AU09_r", " AU12_r", " AU15_r", " AU17_r", " AU20_r", " AU25_r", " AU26_r", "alphaRatio_sma3", "Loudness_sma3", "spectralFlux_sma3", "hammarbergIndex_sma3", "rewards", "speech_duration", "silence_duration"],
-    "test": [],
+    "all": [" AU01_r", " AU02_r", " AU04_r", " AU05_r", " AU06_r", " AU07_r", " AU09_r", " AU10_r", " AU12_r",
+            " AU14_r", " AU15_r", " AU17_r", " AU20_r", " AU23_r", " AU25_r", " AU26_r", " AU45_r", "alphaRatio_sma3",
+            "Loudness_sma3", "spectralFlux_sma3", "hammarbergIndex_sma3", "rewards", "speech_duration",
+            "silence_duration"],
+    "difsa": [" AU01_r", " AU02_r", " AU04_r", " AU05_r", " AU06_r", " AU09_r", " AU12_r", " AU15_r", " AU17_r",
+              " AU20_r", " AU25_r", " AU26_r", "alphaRatio_sma3", "Loudness_sma3", "spectralFlux_sma3",
+              "hammarbergIndex_sma3", "rewards", "speech_duration", "silence_duration"],
+    "dbn": [" AU01_r", " AU02_r", " AU04_r", " AU05_r", " AU06_r", " AU07_r", " AU09_r", " AU12_r", " AU15_r",
+            " AU17_r", " AU20_r", " AU23_r", " AU25_r", " AU26_r", "alphaRatio_sma3", "Loudness_sma3",
+            "spectralFlux_sma3", "hammarbergIndex_sma3", "rewards", "speech_duration", "silence_duration"],
+    "thresh": [" AU01_r", " AU02_r", " AU04_r", " AU05_r", " AU06_r", " AU09_r", " AU12_r", " AU25_r", " AU26_r",
+               "alphaRatio_sma3", "Loudness_sma3", "spectralFlux_sma3", "hammarbergIndex_sma3", "rewards",
+               "speech_duration", "silence_duration"],
+    "test": ["rewards", " AU12_r", " AU14_r", " AU15_r", " AU06_r"],
 
     # "prior_knowledge": [(" AU06_r"," AU12_r" )],
     "pc": {
-        "alpha": 0.01,
+        "alpha": 0.05,
         "indep_test": "kci",  # ["fisherz", "chisq", "gsq", "kci"]
         "uc_rule": 0,  # 0(default), 1, 2. But 2 performs the worst
     },
@@ -31,6 +53,7 @@ params = {
         "alpha": 0.01,
         "independence_test_method": "kci",
         "uc_rule": 0,  # 0(default), 1, 2. But 2 performs the worst
+        # "max_path_length": 2,
         # "cache_path": "tmp/fci_cache_all_feats_1.json",     # just to test uc_rule
 
     },
@@ -70,24 +93,20 @@ params = {
         "search_method": "astar"  # "astar", dp
     }
 }
+# cg = CausalGrapher("data/openface/P01_W1.csv", params=params)
 cg = CausalGrapher("data/results/extended_data.xlsx", params=params)
 base_df = cg.df.copy()
 # cg.get_scatter_plot(best_line=True, degree=2)
 
 graphs = []
 feats = cg.df.columns
-num_ensemble = 1
+
+cg.check_all_independencies()
 
 for _ in range(num_ensemble):
     G = cg.get_causal_graph()
     if show_sepset:
-        num = len(G.graph)
-        for i in range (num):
-            for j in range (num):
-                if i != j and G.graph[i][j] == 0 and G.graph[j][i] == 0:
-                    sepset = [feats[int(node.get_name()[1:]) - 1] for node in G.get_sepset(G.nodes[i], G.nodes[j])]
-                    if len(sepset) > 0:
-                        print(feats[i], feats[j], sepset)
+        display_sepset(G)
     graphs.append(G)
     print("Graph ", _ + 1)
     if apply_ensemble:
@@ -98,12 +117,9 @@ for _ in range(num_ensemble):
         cg.visualize_graph(G)
         break
 
-
-
 if apply_ensemble:
     majored_g = ensemble(graphs, cg.method, feats)
     cg.visualize_graph(majored_g)
-
 
 # cg.learn_direction("rewards", " AU07_r+ AU14_r", method= "anm") # "pnl", "anm
 
