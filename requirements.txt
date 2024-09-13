@@ -1,0 +1,6 @@
+numpy
+causal-learn
+pandas
+matplotlib
+scikit-learn
+Pillow
